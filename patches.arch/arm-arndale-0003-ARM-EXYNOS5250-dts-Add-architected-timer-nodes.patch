@@ -1,0 +1,37 @@
+From 770faecc9b3ecb299664f568e7ca24472ddbff3d Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+Date: Thu, 14 Mar 2013 00:40:41 +0100
+Subject: [PATCH 03/12] ARM: EXYNOS5250: dts: Add architected timer nodes
+
+The exynos 5250 SoC supports A15 style architected timers. Indicate
+this through the device tree.
+
+This is required by KVM.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ arch/arm/boot/dts/exynos5250.dtsi |    8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/arch/arm/boot/dts/exynos5250.dtsi b/arch/arm/boot/dts/exynos5250.dtsi
+index 768cb42..9fb4a38 100644
+--- a/arch/arm/boot/dts/exynos5250.dtsi
++++ b/arch/arm/boot/dts/exynos5250.dtsi
+@@ -57,6 +57,14 @@
+ 		interrupts = <1 9 0xf04>;
+ 	};
+ 
++	timer {
++                compatible = "arm,armv7-timer";
++                interrupts = <1 13 0xf08>,
++                             <1 14 0xf08>,
++                             <1 11 0xf08>,
++                             <1 10 0xf08>;
++        };
++
+ 	combiner:interrupt-controller@10440000 {
+ 		compatible = "samsung,exynos4210-combiner";
+ 		#interrupt-cells = <2>;
+-- 
+1.7.10.4
+

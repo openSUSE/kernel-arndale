@@ -1,0 +1,108 @@
+From 27aa890986d4dea04e0927434e711f5537716af4 Mon Sep 17 00:00:00 2001
+From: Will Deacon <will.deacon@arm.com>
+Date: Mon, 11 Feb 2013 14:43:41 +0000
+Subject: [PATCH 08/12] ARM: mm: kill unused TLB_CAN_READ_FROM_L1_CACHE and
+ use ALT_SMP instead
+
+Many ARMv7 cores have hardware page table walkers that can read the L1
+cache. This is discoverable from the ID_MMFR3 register, although this
+can be expensive to access from the low-level set_pte functions and is a
+pain to cache, particularly with multi-cluster systems.
+
+A useful observation is that the multi-processing extensions for ARMv7
+require coherent table walks, meaning that we can make use of ALT_SMP
+patching in proc-v7-* to patch away the cache flush safely for these
+cores.
+
+Reported-by: Albin Tonnerre <Albin.Tonnerre@arm.com>
+Signed-off-by: Will Deacon <will.deacon@arm.com>
+---
+ arch/arm/include/asm/tlbflush.h |    2 +-
+ arch/arm/mm/proc-v6.S           |    2 --
+ arch/arm/mm/proc-v7-2level.S    |    3 ++-
+ arch/arm/mm/proc-v7-3level.S    |    3 ++-
+ arch/arm/mm/proc-v7.S           |    4 ++--
+ 5 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/arch/arm/include/asm/tlbflush.h b/arch/arm/include/asm/tlbflush.h
+index c7cdb59..42d155e 100644
+--- a/arch/arm/include/asm/tlbflush.h
++++ b/arch/arm/include/asm/tlbflush.h
+@@ -169,7 +169,7 @@
+ # define v6wbi_always_flags	(-1UL)
+ #endif
+ 
+-#define v7wbi_tlb_flags_smp	(TLB_WB | TLB_DCLEAN | TLB_BARRIER | \
++#define v7wbi_tlb_flags_smp	(TLB_WB | TLB_BARRIER | \
+ 				 TLB_V6_U_FULL | TLB_V6_U_PAGE | \
+ 				 TLB_V6_U_ASID | TLB_V6_BP | \
+ 				 TLB_V7_UIS_FULL | TLB_V7_UIS_PAGE | \
+diff --git a/arch/arm/mm/proc-v6.S b/arch/arm/mm/proc-v6.S
+index bcaaa8d..a286d47 100644
+--- a/arch/arm/mm/proc-v6.S
++++ b/arch/arm/mm/proc-v6.S
+@@ -80,12 +80,10 @@ ENTRY(cpu_v6_do_idle)
+ 	mov	pc, lr
+ 
+ ENTRY(cpu_v6_dcache_clean_area)
+-#ifndef TLB_CAN_READ_FROM_L1_CACHE
+ 1:	mcr	p15, 0, r0, c7, c10, 1		@ clean D entry
+ 	add	r0, r0, #D_CACHE_LINE_SIZE
+ 	subs	r1, r1, #D_CACHE_LINE_SIZE
+ 	bhi	1b
+-#endif
+ 	mov	pc, lr
+ 
+ /*
+diff --git a/arch/arm/mm/proc-v7-2level.S b/arch/arm/mm/proc-v7-2level.S
+index 78f520b..9704097 100644
+--- a/arch/arm/mm/proc-v7-2level.S
++++ b/arch/arm/mm/proc-v7-2level.S
+@@ -110,7 +110,8 @@ ENTRY(cpu_v7_set_pte_ext)
+  ARM(	str	r3, [r0, #2048]! )
+  THUMB(	add	r0, r0, #2048 )
+  THUMB(	str	r3, [r0] )
+-	mcr	p15, 0, r0, c7, c10, 1		@ flush_pte
++	ALT_SMP(mov	pc,lr)
++	ALT_UP (mcr	p15, 0, r0, c7, c10, 1)		@ flush_pte
+ #endif
+ 	mov	pc, lr
+ ENDPROC(cpu_v7_set_pte_ext)
+diff --git a/arch/arm/mm/proc-v7-3level.S b/arch/arm/mm/proc-v7-3level.S
+index 6ffd78c..363027e 100644
+--- a/arch/arm/mm/proc-v7-3level.S
++++ b/arch/arm/mm/proc-v7-3level.S
+@@ -73,7 +73,8 @@ ENTRY(cpu_v7_set_pte_ext)
+ 	tst	r3, #1 << (55 - 32)		@ L_PTE_DIRTY
+ 	orreq	r2, #L_PTE_RDONLY
+ 1:	strd	r2, r3, [r0]
+-	mcr	p15, 0, r0, c7, c10, 1		@ flush_pte
++	ALT_SMP(mov	pc, lr)
++	ALT_UP (mcr	p15, 0, r0, c7, c10, 1)		@ flush_pte
+ #endif
+ 	mov	pc, lr
+ ENDPROC(cpu_v7_set_pte_ext)
+diff --git a/arch/arm/mm/proc-v7.S b/arch/arm/mm/proc-v7.S
+index 3a3c015..37716b0 100644
+--- a/arch/arm/mm/proc-v7.S
++++ b/arch/arm/mm/proc-v7.S
+@@ -75,14 +75,14 @@ ENTRY(cpu_v7_do_idle)
+ ENDPROC(cpu_v7_do_idle)
+ 
+ ENTRY(cpu_v7_dcache_clean_area)
+-#ifndef TLB_CAN_READ_FROM_L1_CACHE
++	ALT_SMP(mov	pc, lr)			@ MP extensions imply L1 PTW
++	ALT_UP(W(nop))
+ 	dcache_line_size r2, r3
+ 1:	mcr	p15, 0, r0, c7, c10, 1		@ clean D entry
+ 	add	r0, r0, r2
+ 	subs	r1, r1, r2
+ 	bhi	1b
+ 	dsb
+-#endif
+ 	mov	pc, lr
+ ENDPROC(cpu_v7_dcache_clean_area)
+ 
+-- 
+1.7.10.4
+

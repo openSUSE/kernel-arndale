@@ -1,0 +1,62 @@
+From 1fbc83eac50787b5997935b341a24b08f33fa94d Mon Sep 17 00:00:00 2001
+From: Will Deacon <will.deacon@arm.com>
+Date: Tue, 19 Feb 2013 11:35:42 +0000
+Subject: [PATCH 09/12] ARM: atomics: don't use exclusives for atomic64
+ read/set with LPAE
+
+To ease page table updates with 64-bit descriptors, CPUs implementing
+LPAE are required to implement ldrd/strd as atomic operations.
+
+This patch uses these accessors instead of the exclusive variants when
+performing atomic64_{read,set} on LPAE systems.
+
+Signed-off-by: Will Deacon <will.deacon@arm.com>
+---
+ arch/arm/include/asm/atomic.h |   24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/arch/arm/include/asm/atomic.h b/arch/arm/include/asm/atomic.h
+index c79f61f..da1c77d 100644
+--- a/arch/arm/include/asm/atomic.h
++++ b/arch/arm/include/asm/atomic.h
+@@ -243,6 +243,29 @@ typedef struct {
+ 
+ #define ATOMIC64_INIT(i) { (i) }
+ 
++#ifdef CONFIG_ARM_LPAE
++static inline u64 atomic64_read(const atomic64_t *v)
++{
++	u64 result;
++
++	__asm__ __volatile__("@ atomic64_read\n"
++"	ldrd	%0, %H0, [%1]"
++	: "=&r" (result)
++	: "r" (&v->counter), "Qo" (v->counter)
++	);
++
++	return result;
++}
++
++static inline void atomic64_set(atomic64_t *v, u64 i)
++{
++	__asm__ __volatile__("@ atomic64_set\n"
++"	strd	%2, %H2, [%1]"
++	: "=Qo" (v->counter)
++	: "r" (&v->counter), "r" (i)
++	);
++}
++#else
+ static inline u64 atomic64_read(const atomic64_t *v)
+ {
+ 	u64 result;
+@@ -269,6 +292,7 @@ static inline void atomic64_set(atomic64_t *v, u64 i)
+ 	: "r" (&v->counter), "r" (i)
+ 	: "cc");
+ }
++#endif
+ 
+ static inline void atomic64_add(u64 i, atomic64_t *v)
+ {
+-- 
+1.7.10.4
+

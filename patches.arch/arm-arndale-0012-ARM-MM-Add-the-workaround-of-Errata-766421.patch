@@ -1,0 +1,68 @@
+From e1791f93c61b9ac8aca27eeeb2fbf09f57107c9f Mon Sep 17 00:00:00 2001
+From: boojin <boojin.kim@samsung.com>
+Date: Mon, 10 Dec 2012 00:00:01 +0000
+Subject: [PATCH 12/12] ARM: MM: Add the workaround of Errata 766421
+
+This patch adds the workaround of errata 766421 that adds 'dmb' when changing
+the translation regime after conditions that the errata 766421 may occur.
+Concretely, Add 'dmb' when changing ASID and secure state for cortex-A15 r0p4.
+
+Signed-off-by: Boojin Kim <boojin.kim@samsung.com>
+---
+ arch/arm/Kconfig             |   13 +++++++++++++
+ arch/arm/mach-exynos/Kconfig |    1 +
+ arch/arm/mm/proc-v7-2level.S |    2 ++
+ 3 files changed, 16 insertions(+)
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index 574bbf0..c627160 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -1438,6 +1438,19 @@ config ARM_ERRATA_775420
+ 	 to deadlock. This workaround puts DSB before executing ISB if
+ 	 an abort may occur on cache maintenance.
+ 
++config ARM_ERRATA_766421
++	bool "ARM errata: Strongly-Ordered/Device load or NC LDREX could return incorrect data"
++	depends on CPU_V7
++	help
++	  This option enables the workaround for the erratum 766421 affecting
++	  Cortex-A15 erratum (r0p4).
++	  In certain situations, a strongly ordered or device load instruction,
++	  or a non-cacheable normal memory load-exclusive instruction could
++	  match multiple fill buffers and return incorrect data.
++	  This workaround is add DMB instruction when making any change to the
++	  translation regime and before doing any new loads/stores/preloads
++	  in the new translation regime.
++
+ config ARM_ERRATA_773022
+ 	bool "ARM errata: incorrect instructions may be executed from loop buffer"
+ 	depends on CPU_V7
+diff --git a/arch/arm/mach-exynos/Kconfig b/arch/arm/mach-exynos/Kconfig
+index eaec6a7..c2b761d 100644
+--- a/arch/arm/mach-exynos/Kconfig
++++ b/arch/arm/mach-exynos/Kconfig
+@@ -67,6 +67,7 @@ config SOC_EXYNOS5250
+ 	select S5P_SLEEP if PM
+ 	select S5P_DEV_MFC
+ 	select SAMSUNG_DMADEV
++	select ARM_ERRATA_766421
+ 	help
+ 	  Enable EXYNOS5250 SoC support
+ 
+diff --git a/arch/arm/mm/proc-v7-2level.S b/arch/arm/mm/proc-v7-2level.S
+index 9704097..84f3dbb 100644
+--- a/arch/arm/mm/proc-v7-2level.S
++++ b/arch/arm/mm/proc-v7-2level.S
+@@ -53,6 +53,8 @@ ENTRY(cpu_v7_switch_mm)
+ #endif
+ #ifdef CONFIG_ARM_ERRATA_754322
+ 	dsb
++#elif CONFIG_ARM_ERRATA_766421
++	dmb
+ #endif
+ 	mcr	p15, 0, r1, c13, c0, 1		@ set context ID
+ 	isb
+-- 
+1.7.10.4
+

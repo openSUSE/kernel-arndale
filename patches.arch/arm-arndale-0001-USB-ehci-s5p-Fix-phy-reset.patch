@@ -1,0 +1,73 @@
+From a86f2ea6b010387044e1be69817752e6980b0b5a Mon Sep 17 00:00:00 2001
+From: Alexander Graf <agraf@suse.de>
+Date: Thu, 14 Mar 2013 00:45:36 +0100
+Subject: [PATCH 01/12] USB: ehci-s5p: Fix phy reset
+
+On my Exynos 5 based Arndale system, I need to pull the reset line down
+and then let it go up again to actually perform a reset. Without that
+reset, I can't find any USB hubs on my bus, rendering the USB controller
+useless.
+
+So this patch implements the above logic, making EHCI and OHCI work on
+Arndale systems for me.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+CC: Vivek Gautam <gautam.vivek@samsung.com>
+CC: Jingoo Han <jg1.han@samsung.com>
+CC: Alan Stern <stern@rowland.harvard.edu>
+CC: Kukjin Kim <kgene.kim@samsung.com>
+CC: Felipe Balbi <balbi@ti.com>
+CC: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+
+---
+
+v1 -> v2:
+
+  - remove gpio_free call
+  - move reset logic after phy node search
+---
+ drivers/usb/host/ehci-s5p.c |   13 +++++++++----
+ 1 file changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/usb/host/ehci-s5p.c b/drivers/usb/host/ehci-s5p.c
+index 20ebf6a..b29b2b8 100644
+--- a/drivers/usb/host/ehci-s5p.c
++++ b/drivers/usb/host/ehci-s5p.c
+@@ -103,9 +103,14 @@ static void s5p_setup_vbus_gpio(struct platform_device *pdev)
+ 	if (!gpio_is_valid(gpio))
+ 		return;
+ 
+-	err = gpio_request_one(gpio, GPIOF_OUT_INIT_HIGH, "ehci_vbus_gpio");
+-	if (err)
++	/* reset pulls the line down, then up again */
++	err = gpio_request_one(gpio, GPIOF_OUT_INIT_LOW, "ehci_vbus_gpio");
++	if (err) {
+ 		dev_err(&pdev->dev, "can't request ehci vbus gpio %d", gpio);
++		return;
++	}
++	mdelay(1);
++	__gpio_set_value(gpio, 1);
+ }
+ 
+ static u64 ehci_s5p_dma_mask = DMA_BIT_MASK(32);
+@@ -131,8 +136,6 @@ static int s5p_ehci_probe(struct platform_device *pdev)
+ 	if (!pdev->dev.coherent_dma_mask)
+ 		pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
+ 
+-	s5p_setup_vbus_gpio(pdev);
+-
+ 	s5p_ehci = devm_kzalloc(&pdev->dev, sizeof(struct s5p_ehci_hcd),
+ 				GFP_KERNEL);
+ 	if (!s5p_ehci)
+@@ -152,6 +155,8 @@ static int s5p_ehci_probe(struct platform_device *pdev)
+ 		s5p_ehci->otg = phy->otg;
+ 	}
+ 
++	s5p_setup_vbus_gpio(pdev);
++
+ 	s5p_ehci->dev = &pdev->dev;
+ 
+ 	hcd = usb_create_hcd(&s5p_ehci_hc_driver, &pdev->dev,
+-- 
+1.7.10.4
+
