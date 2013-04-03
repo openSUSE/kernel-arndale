@@ -1,0 +1,47 @@
+Index: linux-3.9-rc4-arndale/arch/arm/mach-virt/virt.c
+===================================================================
+--- linux-3.9-rc4-arndale.orig/arch/arm/mach-virt/virt.c
++++ linux-3.9-rc4-arndale/arch/arm/mach-virt/virt.c
+@@ -22,11 +22,28 @@
+ #include <linux/of_irq.h>
+ #include <linux/of_platform.h>
+ #include <linux/smp.h>
++#include <linux/io.h>
+ 
+ #include <asm/arch_timer.h>
+ #include <asm/mach/arch.h>
+ #include <asm/mach/time.h>
+ 
++#define MAGIC_ADDR 0xFFFFF000ULL
++
++static void virt_power_off(void)
++{
++	volatile void __iomem *magic = ioremap(MAGIC_ADDR, 8);
++	printk(KERN_ERR "virt power off\n");
++	writel(1, magic);
++}
++
++static void virt_restart(char str, const char *cmd)
++{
++	volatile void __iomem *magic = ioremap(MAGIC_ADDR, 8);
++	printk(KERN_ERR "virt reset\n");
++	writel(2, magic);
++}
++
+ static void __init virt_init(void)
+ {
+ 	of_platform_populate(NULL, of_default_bus_match_table, NULL, NULL);
+@@ -36,6 +53,7 @@ static void __init virt_timer_init(void)
+ {
+ 	WARN_ON(arch_timer_of_register() != 0);
+ 	WARN_ON(arch_timer_sched_clock_init() != 0);
++	pm_power_off = virt_power_off;
+ }
+ 
+ static const char *virt_dt_match[] = {
+@@ -51,4 +69,5 @@ DT_MACHINE_START(VIRT, "Dummy Virtual Ma
+ 	.init_machine	= virt_init,
+ 	.smp		= smp_ops(virt_smp_ops),
+ 	.dt_compat	= virt_dt_match,
++	.restart	= virt_restart,
+ MACHINE_END
